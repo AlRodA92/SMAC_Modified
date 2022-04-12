@@ -280,6 +280,7 @@ class StarCraft2Env(MultiAgentEnv):
 
         self.agents = {}
         self.enemies = {}
+        self.neutral = {}
         self._episode_count = 0
         self._episode_steps = 0
         self._total_steps = 0
@@ -295,7 +296,7 @@ class StarCraft2Env(MultiAgentEnv):
         self.previous_enemy_units = None
         self.last_action = np.zeros((self.n_agents, self.n_actions))
         self._min_unit_type = 0
-        self.marine_id = self.marauder_id = self.medivac_id = 0
+        self.marine_id = self.marauder_id = self.medivac_id = self.scv_id = self.ghost_id = 0
         self.hydralisk_id = self.zergling_id = self.baneling_id = 0
         self.stalker_id = self.colossus_id = self.zealot_id = 0
         self.max_distance_x = 0
@@ -850,6 +851,8 @@ class StarCraft2Env(MultiAgentEnv):
         switcher = {
             self.marine_id: 15,
             self.marauder_id: 25,
+            self.scv_id: 15,
+            self.ghost_id: 22,
             self.medivac_id: 200,  # max energy
             self.stalker_id: 35,
             self.zealot_id: 22,
@@ -1493,7 +1496,9 @@ class StarCraft2Env(MultiAgentEnv):
         """Kill all units on the map."""
         units_alive = [
             unit.tag for unit in self.agents.values() if unit.health > 0
-        ] + [unit.tag for unit in self.enemies.values() if unit.health > 0]
+        ] + [unit.tag for unit in self.enemies.values() if unit.health > 0
+        ] + [unit.tag for unit in self.neutral.values() if unit.health > 0]
+        
         debug_command = [
             d_pb.DebugCommand(kill_unit=d_pb.DebugKillUnit(tag=units_alive))
         ]
@@ -1505,6 +1510,7 @@ class StarCraft2Env(MultiAgentEnv):
             # Sometimes not all units have yet been created by SC2
             self.agents = {}
             self.enemies = {}
+            self.neutral = {}
 
             ally_units = [
                 unit
@@ -1526,6 +1532,29 @@ class StarCraft2Env(MultiAgentEnv):
                             self.agents[i].unit_type,
                             self.agents[i].pos.x,
                             self.agents[i].pos.y,
+                        )
+                    )
+
+            neutral_units = [
+                unit
+                for unit in self._obs.observation.raw_data.units
+                if unit.owner not in [1,2]
+            ]
+            neutral_units_sorted = sorted(
+                neutral_units,
+                key=attrgetter("unit_type", "pos.x", "pos.y"),
+                reverse=False,
+            )
+
+            for i in range(len(neutral_units_sorted)):
+                self.neutral[i] = neutral_units_sorted[i]
+                if self.debug:
+                    logging.debug(
+                        "Unit {} is {}, x = {}, y = {}".format(
+                            len(self.neutral),
+                            self.neutral[i].unit_type,
+                            self.neutral[i].pos.x,
+                            self.neutral[i].pos.y,
                         )
                     )
 
@@ -1652,6 +1681,16 @@ class StarCraft2Env(MultiAgentEnv):
         elif self.map_type == "bane":
             self.baneling_id = min_unit_type
             self.zergling_id = min_unit_type + 1
+        elif self.map_type == "multitask_marauder":
+            self.marine_id = min_unit_type
+            self.marauder_id = min_unit_type + 1
+        elif self.map_type == "multitask_scv":
+            self.marine_id = min_unit_type
+            self.scv_id = min_unit_type + 1
+        elif self.map_type == "multitask_ghost":
+            self.marine_id = min_unit_type
+            self.marauder_id = min_unit_type + 1
+            self.ghost_id = min_unit_type + 2
 
     def only_medivac_left(self, ally):
         """Check if only Medivac units are left."""
@@ -1681,6 +1720,14 @@ class StarCraft2Env(MultiAgentEnv):
         """Get unit by ID."""
         return self.agents[a_id]
 
+    def get_neutral_by_id(self, a_id):
+        """Get neutral by ID."""
+        return self.neutral[a_id]
+
+    def get_target_point(self,a_id):
+        pos = self.get_neutral_by_id(0).pos
+        return pos
+        
     def get_stats(self):
         stats = {
             "battles_won": self.battles_won,
