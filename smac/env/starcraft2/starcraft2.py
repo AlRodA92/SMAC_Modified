@@ -399,6 +399,7 @@ class StarCraft2Env(MultiAgentEnv):
         Returns initial observations and states.
         """
         self._episode_steps = 0
+
         if self._episode_count == 0:
             # Launch StarCraft II
             self._launch()
@@ -1582,6 +1583,7 @@ class StarCraft2Env(MultiAgentEnv):
             ]
 
             if all_agents_created and all_enemies_created:  # all good
+                self.x_init, self.y_init = self.get_initial_pos()
                 return
 
             try:
@@ -1691,7 +1693,11 @@ class StarCraft2Env(MultiAgentEnv):
             self.marine_id = min_unit_type
             self.marauder_id = min_unit_type + 1
             self.ghost_id = min_unit_type + 2
-
+        elif self.map_type == "multitask_total":
+            self.marine_id = min_unit_type
+            self.marauder_id = min_unit_type + 1
+            self.ghost_id = min_unit_type + 2
+            self.scv_id = min_unit_type + 3
     def only_medivac_left(self, ally):
         """Check if only Medivac units are left."""
         if self.map_type != "MMM":
@@ -1725,9 +1731,28 @@ class StarCraft2Env(MultiAgentEnv):
         return self.neutral[a_id]
 
     def get_target_point(self,a_id):
+        """Return the position of the 
+        neutral unit."""
         pos = self.get_neutral_by_id(0).pos
         return pos
-        
+    
+    def get_initial_pos(self):
+        """Get the initial position of
+        agent task."""
+        for agent_id in range(self.n_agents):
+            agent = self.get_unit_by_id(agent_id)
+            x_pos = str(agent.pos.x)
+            y_pos = str(agent.pos.y)
+            x_pos_dec = x_pos[::-1].find('.')
+            y_pos_dec = y_pos[::-1].find('.')
+            if x_pos_dec==1 and y_pos_dec==1:
+                x_init = agent.pos.x
+                y_init = agent.pos.y
+            else:
+                x_init = 0
+                y_init = 0
+        return x_init, y_init
+
     def get_stats(self):
         stats = {
             "battles_won": self.battles_won,
